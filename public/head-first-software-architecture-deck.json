@@ -1,0 +1,205 @@
+[
+  {
+    "word": "Trade-off",
+    "phonetic": "/ˈtreɪd.ɑːf/",
+    "meaningVi": "Sự đánh đổi – quy luật số 1: 'Mọi thứ trong kiến trúc phần mềm đều là sự đánh đổi'. Không có kiến trúc tốt nhất, chỉ có sự cân bằng tối ưu giữa các đặc tính đối nghịch.",
+    "itExplanation": "Khi tăng một đặc tính (vd: performance, security), thường phải đánh đổi bằng chi phí, độ phức tạp hoặc độ trễ.",
+    "contextSentence": "The first law of software architecture: Everything in software architecture is a trade-off."
+  },
+  {
+    "word": "Architectural Characteristics",
+    "phonetic": "/ˌɑːr.kə.tek.tʃɚ.əl ˌker.ək.təˈrɪs.tɪks/",
+    "meaningVi": "Đặc tính kiến trúc (-ilities) – các tiêu chí phi chức năng như Scalability, Availability, Fault Tolerance, Maintainability, Deployability định hình cấu trúc hệ thống.",
+    "itExplanation": "Các tiêu chí đo lường khả năng vận hành và bảo trì của hệ thống, không thuộc về logic nghiệp vụ trực tiếp nhưng quyết định thành bại.",
+    "contextSentence": "Architectural characteristics are nondomain design considerations that specify what the architecture needs to support."
+  },
+  {
+    "word": "ADR (Architectural Decision Record)",
+    "phonetic": "/ˌeɪ.diːˈɑːr/",
+    "meaningVi": "Bản ghi quyết định kiến trúc – tài liệu ngắn gọn ghi nhận quyết định kỹ thuật quan trọng gồm 5 phần: Title, Status, Context, Decision, Consequences.",
+    "itExplanation": "Giúp lưu lại lý do 'Tại sao lại chọn kiến trúc này' (Why) cho các thế hệ lập trình viên sau này.",
+    "contextSentence": "The Second Law of Software Architecture states: Why is more important than how. That's where ADRs come in."
+  },
+  {
+    "word": "Logical Component",
+    "phonetic": "/ˈlɑː.dʒɪ.kəl kəmˈpoʊ.nənt/",
+    "meaningVi": "Thành phần logic – khối xây dựng cơ bản gom nhóm dữ liệu và hành vi liên quan, là bước trừu tượng hóa trước khi map sang code vật lý.",
+    "itExplanation": "Một logical component nên có trách nhiệm rõ ràng, độ gắn kết cao và ranh giới xác định.",
+    "contextSentence": "Logical components are the building blocks of an architecture that group related code and data."
+  },
+  {
+    "word": "Physical Architecture",
+    "phonetic": "/ˈfɪz.ɪ.kəl ˈɑːr.kə.tek.tʃɚ/",
+    "meaningVi": "Kiến trúc vật lý – mô hình triển khai thực tế của các component lên server, container, VM, network và cơ sở dữ liệu.",
+    "itExplanation": "Khác với kiến trúc logic (cách tổ chức code), kiến trúc vật lý là cách hệ thống chạy trên hạ tầng máy chủ.",
+    "contextSentence": "Physical architecture defines how logical components are deployed onto physical hardware, containers, or virtual machines."
+  },
+  {
+    "word": "Modular Monolith",
+    "phonetic": "/ˈmɑː.dʒə.lɚ ˈmɑː.nə.lɪθ/",
+    "meaningVi": "Nguyên khối dạng module – ứng dụng chạy trong 1 tiến trình và 1 database duy nhất, nhưng code được phân chia thành các module ranh giới độc lập (theo Domain).",
+    "itExplanation": "Giải pháp trung gian hoàn hảo: giữ sự đơn giản khi deploy của Monolith nhưng có ranh giới module sạch sẽ như Microservices.",
+    "contextSentence": "A modular monolith is an architecture style where domain boundaries are strictly enforced within a single deployment unit."
+  },
+  {
+    "word": "Layered Architecture",
+    "phonetic": "/ˈleɪ.ɚd ˈɑːr.kə.tek.tʃɚ/",
+    "meaningVi": "Kiến trúc phân tầng – phong cách truyền thống chia ngang hệ thống thành các tầng: Presentation, Business, Persistence, Database.",
+    "itExplanation": "Dễ triển khai và chi phí ban đầu thấp, nhưng nhược điểm là khả năng mở rộng (scalability) và triển khai (deployability) hạn chế.",
+    "contextSentence": "Layered architecture separates concerns by organizing code into horizontal layers, such as presentation, business, and database."
+  },
+  {
+    "word": "Sinkhole Anti-pattern",
+    "phonetic": "/ˈsɪŋk.hoʊl ˌæn.tiˈpæt̬.ɚn/",
+    "meaningVi": "Anti-pattern tầng vô tích sự – tình huống request đi xuyên qua các tầng của Layered Architecture mà không có logic xử lý gì ngoài việc gọi tiếp tầng dưới.",
+    "itExplanation": "Nếu hơn 20% request là sinkhole, cần cân nhắc mở tầng (open layer) hoặc chuyển kiến trúc.",
+    "contextSentence": "The architecture sinkhole anti-pattern occurs when requests simply flow through multiple layers with no business logic."
+  },
+  {
+    "word": "Microkernel Architecture",
+    "phonetic": "/ˈmaɪ.kroʊˌkɝː.nəl ˈɑːr.kə.tek.tʃɚ/",
+    "meaningVi": "Kiến trúc vi nhân (Plug-in) – gồm hệ thống lõi tối giản (Core system) và tập hợp các module mở rộng độc lập (Plug-ins).",
+    "itExplanation": "Rất phù hợp cho các sản phẩm tùy biến cao theo khách hàng (như Eclipse, VS Code, trình duyệt hoặc app xử lý bảo hiểm).",
+    "contextSentence": "Microkernel architecture separates the minimal core system from custom features implemented as plug-in components."
+  },
+  {
+    "word": "Microservices Architecture",
+    "phonetic": "/ˌmaɪ.kroʊˈsɝː.vɪ.sɪz ˈɑːr.kə.tek.tʃɚ/",
+    "meaningVi": "Kiến trúc Microservices – phân tách hệ thống thành các service nhỏ, độc lập, có thể triển khai riêng biệt và mỗi service tự sở hữu database riêng.",
+    "itExplanation": "Tối ưu cho khả năng thay đổi liên tục, deploy nhanh và scale độc lập, nhưng đánh đổi bằng độ phức tạp mạng và phân tán dữ liệu.",
+    "contextSentence": "Microservices architecture divides a system into small, independently deployable services organized around business domains."
+  },
+  {
+    "word": "Event-Driven Architecture",
+    "phonetic": "/ɪˈvent ˌdrɪv.ən ˈɑːr.kə.tek.tʃɚ/",
+    "meaningVi": "Kiến trúc hướng sự kiện (EDA) – phong cách bất đồng bộ phân tán cao, các thành phần phát và phản ứng lại các sự kiện (events) qua message broker.",
+    "itExplanation": "Đạt thông lượng cao, độ phản hồi tức thì và loose coupling cao nhất giữa các service.",
+    "contextSentence": "Event-driven architecture enables systems to react to events asynchronously, maximizing decoupling and responsiveness."
+  },
+  {
+    "word": "Broker Topology",
+    "phonetic": "/ˈbroʊ.kɚ təˈpɑː.lə.dʒi/",
+    "meaningVi": "Mô hình Broker trong EDA – các service phát sự kiện vào kênh chung (message broker), các service khác tự nghe và xử lý mà không cần bộ điều phối trung tâm.",
+    "itExplanation": "Ưu điểm: hiệu năng cực cao, scale tốt. Nhược điểm: khó kiểm soát luồng giao dịch phức tạp (workflow).",
+    "contextSentence": "In a broker topology, events are broadcast to event channels with no central mediator orchestrating the flow."
+  },
+  {
+    "word": "Mediator Topology",
+    "phonetic": "/ˈmiː.di.eɪ.t̬ɚ təˈpɑː.lə.dʒi/",
+    "meaningVi": "Mô hình Mediator trong EDA – có một thành phần trung tâm (Event Mediator) phụ trách điều phối chuỗi các bước xử lý sự kiện phức tạp.",
+    "itExplanation": "Ưu điểm: quản lý workflow và xử lý lỗi tốt. Nhược điểm: mediator có thể trở thành bottleneck nếu thiết kế không chuẩn.",
+    "contextSentence": "The mediator topology uses a central event mediator to manage and orchestrate the steps within a complex workflow."
+  },
+  {
+    "word": "Choreography",
+    "phonetic": "/ˌkɔːr.iˈɑː.ɡrə.fi/",
+    "meaningVi": "Biên đạo – mô hình giao tiếp phân tán phi tập trung; mỗi microservice tự biết việc của mình dựa trên sự kiện nhận được mà không có service nào chỉ huy.",
+    "itExplanation": "Tương tự như các vũ công phối hợp nhịp nhàng theo nhạc mà không cần một người đứng hô hiệu lệnh từng bước.",
+    "contextSentence": "Choreography coordinates workflows through decentralized event communication rather than a central orchestrator."
+  },
+  {
+    "word": "Orchestration",
+    "phonetic": "/ˌɔːr.kəˈstreɪ.ʃən/",
+    "meaningVi": "Chỉ huy dàn nhạc – mô hình tập trung nơi một dịch vụ điều phối (Orchestrator) ra lệnh trực tiếp cho các dịch vụ con từng bước một.",
+    "itExplanation": "Dễ theo dõi trạng thái nghiệp vụ và xử lý rollback, nhưng tạo ra coupling cao hơn vào dịch vụ orchestrator.",
+    "contextSentence": "Orchestration uses a central coordinator service to explicitly invoke other services step by step."
+  },
+  {
+    "word": "Afferent Coupling (Ca)",
+    "phonetic": "/ˈæf.ɚ.ənt ˈkʌp.lɪŋ/",
+    "meaningVi": "Độ liên kết đến (Ca) – thước đo số lượng các thành phần bên ngoài phụ thuộc VÀO component này (thể hiện mức độ trách nhiệm của component).",
+    "itExplanation": "Ca càng cao thì component càng có nhiều bên sử dụng, sửa đổi nó sẽ ảnh hưởng đến nhiều nơi.",
+    "contextSentence": "Afferent coupling measures incoming dependencies—how many other components rely on this component."
+  },
+  {
+    "word": "Efferent Coupling (Ce)",
+    "phonetic": "/ˈef.ɚ.ənt ˈkʌp.lɪŋ/",
+    "meaningVi": "Độ liên kết đi (Ce) – thước đo số lượng các thành phần bên ngoài mà component này PHỤ THUỘC VÀO (thể hiện tính bất ổn định).",
+    "itExplanation": "Ce càng cao thì component càng dễ bị ảnh hưởng khi các thư viện/service bên ngoài thay đổi.",
+    "contextSentence": "Efferent coupling measures outgoing dependencies—how many external components this component depends upon."
+  },
+  {
+    "word": "Law of Demeter",
+    "phonetic": "/lɑː əv dɪˈmiː.tɚ/",
+    "meaningVi": "Nguyên lý Demeter (Principle of Least Knowledge) – chỉ gọi phương thức của các đối tượng liên quan trực tiếp, không gọi chuỗi bắc cầu xuyên sâu (vd: a.getB().getC().doX()).",
+    "itExplanation": "Giúp giảm coupling và ngăn chặn sự phụ thuộc vào cấu trúc nội bộ của component khác.",
+    "contextSentence": "The Law of Demeter states that a component should only interact with its immediate collaborators to minimize coupling."
+  },
+  {
+    "word": "Cohesion",
+    "phonetic": "/koʊˈhiː.ʒən/",
+    "meaningVi": "Độ gắn kết nội tại – mức độ các hàm, class và dữ liệu bên trong một component thuộc về nhau và cùng thực hiện một mục đích duy nhất.",
+    "itExplanation": "Nguyên tắc vàng của kiến trúc: High Cohesion (gắn kết cao) đi kèm Low Coupling (phụ thuộc lỏng).",
+    "contextSentence": "Cohesion measures how closely related all the responsibilities and code within a single component are."
+  },
+  {
+    "word": "Entity Trap",
+    "phonetic": "/ˈen.t̬ə.t̬i træp/",
+    "meaningVi": "Bẫy thực thể – sai lầm phổ biến khi chia các component kiến trúc 1-1 theo các bảng database (UserComponent, OrderComponent) thay vì theo workflow nghiệp vụ.",
+    "itExplanation": "Tạo ra các component thiếu cohesion và dẫn đến việc các luồng nghiệp vụ bị xé vụn ra nhiều component.",
+    "contextSentence": "The entity trap occurs when architects map components directly to database entities instead of business workflows."
+  },
+  {
+    "word": "Database-per-service",
+    "phonetic": "/ˈdeɪ.t̬ə.beɪs pɝː ˈsɝː.vɪs/",
+    "meaningVi": "Mỗi service một cơ sở dữ liệu – nguyên tắc cốt lõi của Microservices: mỗi service sở hữu độc quyền database của mình, ngăn chặn chia sẻ trực tiếp.",
+    "itExplanation": "Tránh coupling qua schema database, giúp các team deploy độc lập mà không sợ phá vỡ dữ liệu của team khác.",
+    "contextSentence": "The database-per-service pattern ensures that microservices do not share database tables or schema."
+  },
+  {
+    "word": "Eventual Consistency",
+    "phonetic": "/ɪˈven.tʃu.əl kənˈsɪs.tən.si/",
+    "meaningVi": "Tính nhất quán cuối cùng – mô hình nhất quán dữ liệu trong hệ phân tán: dữ liệu có thể tạm thời không khớp giữa các node nhưng chắc chắn sẽ đồng bộ sau một khoảng thời gian.",
+    "itExplanation": "Được dùng để đổi lấy tính sẵn sàng (Availability) và hiệu năng (Performance) cao hơn theo định lý CAP.",
+    "contextSentence": "Eventual consistency accepts temporary discrepancies across distributed services in exchange for higher availability."
+  },
+  {
+    "word": "Backpressure",
+    "phonetic": "/ˈbækˌpreʃ.ɚ/",
+    "meaningVi": "Áp lực ngược – cơ chế phản hồi từ consumer báo cho producer giảm tốc độ gửi dữ liệu khi hàng đợi hoặc tài nguyên sắp cạn kiệt.",
+    "itExplanation": "Bảo vệ hệ thống không bị crash do tràn bộ nhớ (Out-Of-Memory) khi lưu lượng traffic tăng đột biến.",
+    "contextSentence": "Backpressure allows a receiving service to signal an upstream producer to slow down message delivery."
+  },
+  {
+    "word": "Granularity Disintegrator",
+    "phonetic": "/ˌɡræn.jəˈler.ə.t̬i dɪsˈɪn.t̬ə.ɡreɪ.t̬ɚ/",
+    "meaningVi": "Yếu tố làm nhỏ hạt service – các lý do để tách nhỏ một microservice (vd: nhu cầu scale khác nhau, tần suất deploy khác nhau, tính biến động code).",
+    "itExplanation": "Ví dụ: tính năng thanh toán cần deploy 2 lần/ngày và bảo mật cao nên tách khỏi module xem catalog sản phẩm.",
+    "contextSentence": "Granularity disintegrators are drivers such as differing scalability or deployment frequency that push services to be smaller."
+  },
+  {
+    "word": "Granularity Integrator",
+    "phonetic": "/ˌɡræn.jəˈler.ə.t̬i ˈɪn.t̬ə.ɡreɪ.t̬ɚ/",
+    "meaningVi": "Yếu tố gom hạt service – các lý do giữ hoặc gộp các microservice lại (vd: cần atomic transaction giữa 2 bảng, phụ thuộc dữ liệu dày đặc, độ trễ mạng).",
+    "itExplanation": "Ngăn chặn việc phân mảnh service quá mức dẫn đến hệ thống vi mô rối rắm (nano-services).",
+    "contextSentence": "Granularity integrators are factors such as database transactions and data dependencies that justify keeping services together."
+  },
+  {
+    "word": "Technical Debt",
+    "phonetic": "/ˈtek.nɪ.kəl det/",
+    "meaningVi": "Nợ kỹ thuật – chi phí bảo trì và sửa lỗi tăng thêm trong tương lai do chọn cách làm tắt, ẩu hoặc giải pháp tạm thời ở hiện tại.",
+    "itExplanation": "Tương tự nợ tài chính: nếu không trả lãi (refactoring, test), nợ kỹ thuật sẽ làm chậm toàn bộ tốc độ phát triển dự án.",
+    "contextSentence": "Paying back technical debt through refactoring prevents the architecture from becoming fragile and unmaintainable."
+  },
+  {
+    "word": "Architecture Kata",
+    "phonetic": "/ˈɑːr.kə.tek.tʃɚ ˈkɑː.t̬ə/",
+    "meaningVi": "Bài tập thực hành kiến trúc – kịch bản bài toán giả định ngắn để nhóm kỹ sư luyện tập phân tích đặc tính, chọn kiểu kiến trúc và vẽ diagram.",
+    "itExplanation": "Cách tốt nhất để rèn luyện kỹ năng thiết kế kiến trúc mà không phải chịu rủi ro trên dự án thật.",
+    "contextSentence": "Architecture katas provide small, realistic scenarios for practicing architectural trade-off analysis and decision-making."
+  },
+  {
+    "word": "Breadth versus Depth",
+    "phonetic": "/bredθ ˈvɝː.səs depθ/",
+    "meaningVi": "Độ rộng đối trọng độ sâu – sự khác biệt tư duy: Lập trình viên cần biết sâu (depth) một vài công nghệ, trong khi Kiến trúc sư cần biết rộng (breadth) nhiều giải pháp khác nhau.",
+    "itExplanation": "Kiến trúc sư không cần biết mọi dòng code, nhưng phải biết công nghệ nào tồn tại và ưu nhược điểm của từng lựa chọn.",
+    "contextSentence": "The knowledge pyramid highlights that an architect's strength lies in broad knowledge across many technologies."
+  },
+  {
+    "word": "TripEZ",
+    "phonetic": "/trɪp iː-ziː/",
+    "meaningVi": "TripEZ – ứng dụng du lịch giả định xuyên suốt cuốn sách Head First Software Architecture để minh họa quá trình từ thiết kế Monolith đến Microservices.",
+    "itExplanation": "Bài tập tình huống lớn trong sách nơi bạn trực tiếp đóng vai trò kiến trúc sư trưởng để ra quyết định.",
+    "contextSentence": "TripEZ is the hands-on case study in Head First Software Architecture where you design and evolve a travel platform."
+  }
+]

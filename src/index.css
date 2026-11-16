@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center gap-1 rounded bg-slate-700 px-2 py-1 text-sm hover:bg-slate-600 disabled:opacity-50;
+  }
+}
+
+html, body { overscroll-behavior: none; }
+.textLayer { line-height: 1; }
+.textLayer ::selection { background: rgba(56, 189, 248, 0.4); }
