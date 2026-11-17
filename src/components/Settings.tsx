@@ -4,10 +4,14 @@ import { exportBackup, importBackup } from '../services/exportService'
 import { syncWithGist, createQuickSetupLink } from '../services/syncService'
 import {
   Sparkles, Volume2, Save, HardDrive, Cloud, RefreshCw, Share2, ExternalLink, Check, BookOpen,
+  Smartphone, Download,
 } from 'lucide-react'
+import { usePWAInstall } from '../hooks/usePWAInstall'
+import InstallGuideModal from './InstallGuideModal'
 
 export default function Settings() {
   const s = useSettings()
+  const { isStandalone, isIOSDevice, showGuideModal, setShowGuideModal, triggerInstall } = usePWAInstall()
   const [usage, setUsage] = useState('')
   const [persisted, setPersisted] = useState<boolean | null>(null)
   const [syncing, setSyncing] = useState(false)
@@ -292,6 +296,46 @@ export default function Settings() {
           </button>
         )}
       </section>
+
+      {/* 7. PWA Standalone Mode & iPad Installation */}
+      <section className="rounded-2xl border border-slate-800 bg-slate-800/60 p-5 shadow-sm">
+        <h2 className="mb-3 text-base font-bold text-sky-300 flex items-center gap-2">
+          <Smartphone size={18} /> Cài đặt App trên iPad / Mobile (PWA)
+        </h2>
+        <div className="space-y-1.5 text-slate-300 text-xs">
+          <div>
+            Trạng thái hiện tại:{' '}
+            <b className={isStandalone ? 'text-emerald-400' : 'text-amber-400'}>
+              {isStandalone
+                ? '✓ Đang chạy ở chế độ App độc lập (Toàn màn hình)'
+                : 'Đang chạy trong trình duyệt web'}
+            </b>
+          </div>
+          <p className="text-slate-400 text-xs leading-relaxed pt-1">
+            Cài đặt ứng dụng lên màn hình chính giúp mở sách nhanh hơn, loại bỏ thanh địa chỉ duyệt web và đọc PDF toàn màn hình như một ứng dụng native.
+          </p>
+        </div>
+
+        {!isStandalone ? (
+          <button
+            className="btn mt-3 !min-h-[40px] !bg-sky-600 hover:!bg-sky-500 text-white flex items-center gap-2"
+            onClick={triggerInstall}
+          >
+            <Download size={16} />
+            {isIOSDevice ? 'Xem hướng dẫn cài đặt trên iPad / iPhone' : 'Cài đặt App vào máy'}
+          </button>
+        ) : (
+          <div className="mt-3 flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
+            <Check size={16} /> Ứng dụng đã được thêm vào Màn hình chính
+          </div>
+        )}
+      </section>
+
+      <InstallGuideModal
+        isOpen={showGuideModal}
+        onClose={() => setShowGuideModal(false)}
+        isIOS={isIOSDevice}
+      />
     </div>
   )
 }

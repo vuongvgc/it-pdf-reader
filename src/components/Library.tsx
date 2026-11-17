@@ -1,10 +1,12 @@
 import { useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Plus, Trash2, Search, Tag, X, BookOpen, AlertTriangle, Cloud } from 'lucide-react'
+import { Plus, Trash2, Search, Tag, X, BookOpen, AlertTriangle, Cloud, Download, Smartphone } from 'lucide-react'
 import { db, type Book } from '../db'
 import { importPdf } from '../services/pdfService'
 import { syncWithGist } from '../services/syncService'
 import { useSettings } from '../stores/useSettingsStore'
+import { usePWAInstall } from '../hooks/usePWAInstall'
+import InstallGuideModal from './InstallGuideModal'
 
 export default function Library({
   onOpen,
@@ -15,6 +17,7 @@ export default function Library({
 }) {
   const books = useLiveQuery(() => db.books.orderBy('lastOpenedAt').reverse().toArray(), []) ?? []
   const githubToken = useSettings((s) => s.githubToken)
+  const { isStandalone, isIOSDevice, showGuideModal, setShowGuideModal, triggerInstall } = usePWAInstall()
   const [q, setQ] = useState('')
   const [tag, setTag] = useState('')
   const [busy, setBusy] = useState(false)
@@ -123,6 +126,16 @@ export default function Library({
             </button>
           )}
         </div>
+
+        {!isStandalone && (
+          <button
+            className="btn !min-h-[42px] border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-medium"
+            onClick={triggerInstall}
+            title="Cài đặt App lên iPad / iPhone / Máy tính"
+          >
+            <Download size={17} /> Cài đặt App
+          </button>
+        )}
 
         <button
           className="btn !min-h-[42px] text-sky-300 border border-slate-700"
@@ -316,6 +329,13 @@ export default function Library({
           </div>
         </div>
       )}
+
+      {/* PWA Install Guide Modal for iPad/iOS */}
+      <InstallGuideModal
+        isOpen={showGuideModal}
+        onClose={() => setShowGuideModal(false)}
+        isIOS={isIOSDevice}
+      />
     </div>
   )
 }
