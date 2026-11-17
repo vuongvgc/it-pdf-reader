@@ -1,19 +1,46 @@
 import { useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Plus, Trash2, Search, Tag, X, BookOpen, AlertTriangle } from 'lucide-react'
+import { Plus, Trash2, Search, Tag, X, BookOpen, AlertTriangle, Cloud } from 'lucide-react'
 import { db, type Book } from '../db'
 import { importPdf } from '../services/pdfService'
+import { syncWithGist } from '../services/syncService'
+import { useSettings } from '../stores/useSettingsStore'
 
-export default function Library({ onOpen }: { onOpen: (b: Book) => void }) {
+export default function Library({
+  onOpen,
+  onGoSettings,
+}: {
+  onOpen: (b: Book) => void
+  onGoSettings?: () => void
+}) {
   const books = useLiveQuery(() => db.books.orderBy('lastOpenedAt').reverse().toArray(), []) ?? []
+  const githubToken = useSettings((s) => s.githubToken)
   const [q, setQ] = useState('')
   const [tag, setTag] = useState('')
   const [busy, setBusy] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [syncToast, setSyncToast] = useState('')
   const [drag, setDrag] = useState(false)
   const [editingBook, setEditingBook] = useState<Book | null>(null)
   const [tagDraft, setTagDraft] = useState('')
   const [deletingBook, setDeletingBook] = useState<Book | null>(null)
   const input = useRef<HTMLInputElement>(null)
+
+  const quickSync = async () => {
+    if (!githubToken.trim()) {
+      onGoSettings?.()
+      return
+    }
+    setSyncing(true)
+    try {
+      const r = await syncWithGist()
+      setSyncToast(`✓ Đã đồng bộ (${r.stats.vocabularies} từ, ${r.stats.annotations} ghi chú)`)
+    } catch (e: any) {
+      setSyncToast('⚠ ' + e.message)
+    }
+    setSyncing(false)
+    setTimeout(() => setSyncToast(''), 3500)
+  }
 
   const addFiles = async (files: FileList | File[]) => {
     setBusy(true)
@@ -74,6 +101,12 @@ export default function Library({ onOpen }: { onOpen: (b: Book) => void }) {
         addFiles(e.dataTransfer.files)
       }}
     >
+      {syncToast && (
+        <div className="mb-4 rounded-xl border border-sky-500/40 bg-slate-800 p-3 text-xs font-medium text-sky-200 shadow-lg">
+          {syncToast}
+        </div>
+      )}
+
       {/* Search & Upload Action Bar */}
       <div className="mb-5 flex flex-wrap items-center gap-2.5">
         <div className="flex min-w-[12rem] flex-1 items-center gap-2 rounded-xl bg-slate-800/90 border border-slate-700 px-3 py-1 shadow-sm">
@@ -90,6 +123,16 @@ export default function Library({ onOpen }: { onOpen: (b: Book) => void }) {
             </button>
           )}
         </div>
+
+        <button
+          className="btn !min-h-[42px] text-sky-300 border border-slate-700"
+          onClick={quickSync}
+          disabled={syncing}
+          title="Đồng bộ tiến độ & từ vựng qua GitHub Gist"
+        >
+          <Cloud size={17} className={syncing ? 'animate-bounce' : ''} />
+          {syncing ? 'Đang sync…' : 'Đồng bộ'}
+        </button>
 
         <button
           className="btn !min-h-[42px] !bg-sky-600 hover:!bg-sky-500 text-white font-medium !px-4"

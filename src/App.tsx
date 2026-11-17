@@ -1,33 +1,78 @@
 import { useEffect, useState } from 'react'
 import { Library as LibIcon, BrainCircuit, Settings as Cog } from 'lucide-react'
-import type { Book } from './db'
+import { db, type Book } from './db'
 import Library from './components/Library'
 import Reader from './components/Reader'
 import Vocab from './components/Vocab'
 import Settings from './components/Settings'
+import { applyQuickSetupFromHash, syncWithGist } from './services/syncService'
+import { useSettings } from './stores/useSettingsStore'
 
 type Tab = 'library' | 'vocab' | 'settings'
 
 export default function App() {
-  const [book, setBook] = useState<Book | null>(null)
+  const [bookId, setBookId] = useState<string | null>(null)
+  const [activeBook, setActiveBook] = useState<Book | null>(null)
   const [tab, setTab] = useState<Tab>('library')
+  const [toast, setToast] = useState('')
 
   useEffect(() => {
     navigator.storage?.persist?.()
+
+    const importedSetup = applyQuickSetupFromHash()
+    const { githubToken, autoSync } = useSettings.getState()
+
+    if (importedSetup) {
+      setToast('✓ Đã nạp cấu hình Key tự động! Đang đồng bộ dữ liệu…')
+      if (useSettings.getState().githubToken) {
+        syncWithGist()
+          .then((r) =>
+            setToast(`✓ Đã đồng bộ xong (${r.stats.vocabularies} từ vựng, ${r.stats.annotations} highlight)!`),
+          )
+          .catch((e) => setToast('⚠ ' + e.message))
+          .finally(() => setTimeout(() => setToast(''), 4500))
+      } else {
+        setTimeout(() => setToast(''), 3500)
+      }
+    } else if (autoSync && githubToken.trim()) {
+      syncWithGist().catch(() => {})
+    }
   }, [])
 
-  if (book) return <Reader book={book} onBack={() => setBook(null)} />
+  const openBook = async (b: Book) => {
+    const fresh = (await db.books.get(b.id)) || b
+    setActiveBook(fresh)
+    setBookId(fresh.id)
+  }
+
+  if (bookId && activeBook) {
+    return (
+      <Reader
+        book={activeBook}
+        onBack={() => {
+          setBookId(null)
+          setActiveBook(null)
+        }}
+      />
+    )
+  }
 
   const tabs: { t: Tab; label: string; icon: JSX.Element }[] = [
     { t: 'library', label: 'Thư viện', icon: <LibIcon size={20} /> },
     { t: 'vocab', label: 'Từ vựng', icon: <BrainCircuit size={20} /> },
-    { t: 'settings', label: 'Cài đặt', icon: <Cog size={20} /> },
+    { t: 'settings', label: 'Cài đặt & Sync', icon: <Cog size={20} /> },
   ]
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-slate-900 text-slate-100">
+      {toast && (
+        <div className="fixed top-4 inset-x-4 z-50 mx-auto max-w-md rounded-xl border border-emerald-500/60 bg-emerald-950/95 p-3 text-center text-xs font-medium text-emerald-200 shadow-2xl">
+          {toast}
+        </div>
+      )}
+
       <main className="flex-1 pb-20">
-        {tab === 'library' && <Library onOpen={setBook} />}
+        {tab === 'library' && <Library onOpen={openBook} onGoSettings={() => setTab('settings')} />}
         {tab === 'vocab' && <Vocab />}
         {tab === 'settings' && <Settings />}
       </main>

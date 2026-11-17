@@ -48,12 +48,19 @@ export interface Vocab {
   nextReviewAt: number
   createdAt: number
 }
+export interface AICacheItem {
+  term: string // lowercase normalized key
+  explanation: string
+  updatedAt: number
+}
 
 class AppDB extends Dexie {
   books!: Table<Book, string>
   bookFiles!: Table<BookFile, string>
   annotations!: Table<Annotation, string>
   vocabularies!: Table<Vocab, string>
+  aiCache!: Table<AICacheItem, string>
+
   constructor() {
     super('it-pdf-reader')
     this.version(1).stores({
@@ -64,6 +71,9 @@ class AppDB extends Dexie {
     })
     this.version(2).stores({
       vocabularies: 'id, bookId, nextReviewAt, word, createdAt',
+    })
+    this.version(3).stores({
+      aiCache: 'term, updatedAt',
     })
   }
 }

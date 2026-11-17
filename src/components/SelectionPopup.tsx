@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Volume2, Sparkles, BookmarkPlus, X, Highlighter } from 'lucide-react'
+import { Volume2, Sparkles, BookmarkPlus, X, Highlighter, KeyRound } from 'lucide-react'
 import { db, uid, type HColor, type Rect } from '../db'
 import { lookupDictionary, lookupGlossary, speak, type DictResult } from '../services/dictionaryService'
-import { explainIT } from '../services/aiService'
+import { explainIT, lookupAICache } from '../services/aiService'
 import { useSettings } from '../stores/useSettingsStore'
 import { HL_COLORS } from './PageView'
 
@@ -25,33 +25,69 @@ export default function SelectionPopup({
   bookTitle: string
   onClose: () => void
 }) {
-  const ttsRate = useSettings((s) => s.ttsRate)
+  const { ttsRate, apiKey, aiProvider, set: setSettings } = useSettings()
   const wordCount = sel.text.trim().split(/\s+/).length
   const isWord = wordCount === 1
   const isPhrase = wordCount <= 4
   const [gloss, setGloss] = useState<string | null>(null)
   const [dict, setDict] = useState<DictResult | null>(null)
   const [ai, setAi] = useState('')
+  const [fromCache, setFromCache] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
+  const [needKey, setNeedKey] = useState(false)
+  const [keyDraft, setKeyDraft] = useState('')
   const [msg, setMsg] = useState('')
 
   useEffect(() => {
     setGloss(null)
     setDict(null)
     setAi('')
+    setFromCache(false)
+    setNeedKey(false)
     setMsg('')
     if (isPhrase) {
       lookupGlossary(sel.text).then(setGloss)
+      lookupAICache(sel.text).then((cached) => {
+        if (cached) {
+          setAi(cached)
+          setFromCache(true)
+        }
+      })
     }
     if (isWord) {
       lookupDictionary(sel.text).then(setDict)
     }
   }, [sel.text, isWord, isPhrase])
 
-  const askAI = async () => {
+  const askAI = async (forceRefresh = false) => {
+    if (!apiKey.trim()) {
+      setNeedKey(true)
+      return
+    }
+    setAiLoading(true)
+    setNeedKey(false)
+    try {
+      const res = await explainIT({ text: sel.text, context: sel.context, bookTitle, forceRefresh })
+      setAi(res)
+      setFromCache(false)
+    } catch (e: any) {
+      if (e.message === 'NO_API_KEY') {
+        setNeedKey(true)
+      } else {
+        setAi('⚠ ' + e.message)
+      }
+    }
+    setAiLoading(false)
+  }
+
+  const saveInlineKeyAndAsk = async () => {
+    if (!keyDraft.trim()) return
+    setSettings({ apiKey: keyDraft.trim() })
+    setNeedKey(false)
     setAiLoading(true)
     try {
-      setAi(await explainIT({ text: sel.text, context: sel.context, bookTitle }))
+      const res = await explainIT({ text: sel.text, context: sel.context, bookTitle, forceRefresh: true })
+      setAi(res)
     } catch (e: any) {
       setAi('⚠ ' + e.message)
     }
@@ -93,21 +129,19 @@ export default function SelectionPopup({
     onClose()
   }
 
-  // Detect coarse pointer (iPad, iPhone, Android touch)
   const isTouchDevice =
     typeof window !== 'undefined' &&
     (window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 1024)
 
   const desktopStyle: React.CSSProperties = !isTouchDevice
     ? {
-        left: Math.min(Math.max(12, sel.anchor.x - 160), window.innerWidth - 340),
-        top: Math.min(sel.anchor.y + 12, window.innerHeight - 360),
+        left: Math.min(Math.max(12, sel.anchor.x - 160), window.innerWidth - 360),
+        top: Math.min(sel.anchor.y + 12, window.innerHeight - 380),
       }
     : {}
 
   return (
     <>
-      {/* Touch Backdrop to easily dismiss by tapping outside */}
       {isTouchDevice && (
         <div
           className="fixed inset-0 z-30 bg-black/25 backdrop-blur-[1px]"
@@ -122,11 +156,10 @@ export default function SelectionPopup({
         style={desktopStyle}
         className={
           isTouchDevice
-            ? 'fixed inset-x-0 bottom-0 z-40 max-h-[70vh] overflow-y-auto rounded-t-2xl border-t border-slate-700 bg-slate-900/95 p-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-sm shadow-2xl backdrop-blur-md transition-transform animate-in slide-in-from-bottom duration-200'
-            : 'fixed z-40 w-84 max-h-[65vh] overflow-y-auto rounded-xl border border-slate-700 bg-slate-800 p-3.5 text-sm shadow-2xl backdrop-blur-md'
+            ? 'fixed inset-x-0 bottom-0 z-40 max-h-[72vh] overflow-y-auto rounded-t-2xl border-t border-slate-700 bg-slate-900/95 p-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-sm shadow-2xl backdrop-blur-md transition-transform animate-in slide-in-from-bottom duration-200'
+            : 'fixed z-40 w-[22rem] max-h-[68vh] overflow-y-auto rounded-xl border border-slate-700 bg-slate-800 p-3.5 text-sm shadow-2xl backdrop-blur-md'
         }
       >
-        {/* Mobile handle indicator */}
         {isTouchDevice && (
           <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-600" />
         )}
@@ -135,7 +168,7 @@ export default function SelectionPopup({
           <div className="font-bold text-base text-sky-300 line-clamp-2">{sel.text}</div>
           <button
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-700 text-slate-300 hover:bg-slate-600 active:scale-95 transition"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-700 text-slate-300 hover:bg-slate-600 active:scale-95 transition"
             title="Đóng"
           >
             <X size={18} />
@@ -157,12 +190,41 @@ export default function SelectionPopup({
         ))}
 
         {ai && (
-          <div className="my-2.5 whitespace-pre-wrap rounded-xl border border-slate-700 bg-slate-800/90 p-2.5 text-xs text-slate-200 leading-relaxed">
+          <div className="my-2.5 whitespace-pre-wrap rounded-xl border border-amber-500/30 bg-slate-800/90 p-2.5 text-xs text-slate-200 leading-relaxed">
+            {fromCache && (
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
+                ⚡ Từ điển AI đã lưu
+              </div>
+            )}
             {ai}
           </div>
         )}
 
-        {/* Action Buttons with comfortable touch height */}
+        {/* Inline API Key Input if missing */}
+        {needKey && (
+          <div className="my-2.5 rounded-xl border border-amber-500/50 bg-slate-800 p-3 text-xs">
+            <div className="mb-1.5 flex items-center gap-1.5 font-semibold text-amber-300">
+              <KeyRound size={14} /> Nhập nhanh {aiProvider === 'gemini' ? 'Gemini' : 'OpenAI'} API Key:
+            </div>
+            <div className="flex gap-1.5">
+              <input
+                type="password"
+                value={keyDraft}
+                onChange={(e) => setKeyDraft(e.target.value)}
+                placeholder="Dán API Key (AIza... hoặc sk-...)"
+                className="min-w-0 flex-1 rounded-lg border border-slate-600 bg-slate-900 px-2.5 py-1.5 text-xs text-slate-100 outline-none focus:border-sky-500"
+              />
+              <button
+                className="btn !bg-sky-600 hover:!bg-sky-500 text-white text-xs !py-1 !px-3"
+                onClick={saveInlineKeyAndAsk}
+              >
+                Lưu & Hỏi
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Action Buttons */}
         <div className="mt-3 flex flex-wrap gap-2">
           <button
             className="btn !min-h-[40px] flex-1 sm:flex-none"
@@ -172,10 +234,10 @@ export default function SelectionPopup({
           </button>
           <button
             className="btn !min-h-[40px] flex-1 sm:flex-none text-amber-300"
-            onClick={askAI}
+            onClick={() => askAI(fromCache)}
             disabled={aiLoading}
           >
-            <Sparkles size={16} /> {aiLoading ? 'Đang hỏi…' : 'Giải thích IT'}
+            <Sparkles size={16} /> {aiLoading ? 'Đang hỏi…' : fromCache ? 'Hỏi lại AI' : 'Giải thích IT'}
           </button>
           <button
             className="btn !min-h-[40px] flex-1 sm:flex-none text-sky-300"
@@ -185,7 +247,7 @@ export default function SelectionPopup({
           </button>
         </div>
 
-        {/* Highlight Swatches (Touch friendly 36x36px) */}
+        {/* Highlight Swatches */}
         <div className="mt-3.5 flex items-center gap-3 border-t border-slate-700/80 pt-3">
           <span className="text-xs text-slate-400 flex items-center gap-1">
             <Highlighter size={15} /> Highlight:

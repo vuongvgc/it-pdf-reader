@@ -2,11 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
   ArrowLeft, ZoomIn, ZoomOut, List, Search, Highlighter, Sun, Moon, Coffee, Download,
-  Maximize2, Minimize2, Trash2, X, ChevronLeft, ChevronRight,
+  Maximize2, Minimize2, Trash2, X, ChevronLeft, ChevronRight, Sparkles, Scissors,
+  Columns2, Undo2, KeyRound, Send,
 } from 'lucide-react'
 import { db, type Annotation, type Book, type Rect } from '../db'
 import { getOutline, loadPdf, searchText, type OutlineItem, type PDFDoc } from '../services/pdfService'
 import { annotationsToMarkdown, download } from '../services/exportService'
+import { askPageAI } from '../services/aiService'
+import { syncWithGist } from '../services/syncService'
 import { useSettings, type Theme } from '../stores/useSettingsStore'
 import PageView from './PageView'
 import SelectionPopup, { type Sel } from './SelectionPopup'
@@ -22,15 +25,17 @@ function sentenceAround(full: string, sel: string) {
   return full.slice(start < 0 ? 0 : start + 2, end).trim()
 }
 
-type Panel = null | 'outline' | 'search' | 'notes'
+type Panel = null | 'outline' | 'search' | 'notes' | 'ai'
 
 export default function Reader({ book, onBack }: { book: Book; onBack: () => void }) {
-  const { theme, set } = useSettings()
+  const { theme, cropMargins, underlineVocab, apiKey, aiProvider, githubToken, autoSync, set } = useSettings()
   const [doc, setDoc] = useState<PDFDoc | null>(null)
   const [base, setBase] = useState({ w: 600, h: 800 })
   const [zoom, setZoom] = useState(book.zoom) // 0 = fit width
   const [fitScale, setFitScale] = useState(1)
+  const [twoPage, setTwoPage] = useState(false)
   const [page, setPage] = useState(book.currentPage)
+  const [prevJumpPage, setPrevJumpPage] = useState<number | null>(null)
   const [panel, setPanel] = useState<Panel>(null)
   const [outline, setOutline] = useState<OutlineItem[]>([])
   const [sel, setSel] = useState<Sel | null>(null)
@@ -40,9 +45,26 @@ export default function Reader({ book, onBack }: { book: Book; onBack: () => voi
   const [editingAnn, setEditingAnn] = useState<Annotation | null>(null)
   const [noteDraft, setNoteDraft] = useState('')
 
+  // AI Page Copilot states
+  const [aiQuestion, setAiQuestion] = useState('')
+  const [aiAnswer, setAiAnswer] = useState('')
+  const [aiPageLoading, setAiPageLoading] = useState(false)
+  const [needKeyInline, setNeedKeyInline] = useState(false)
+  const [inlineKeyDraft, setInlineKeyDraft] = useState('')
+
   const scrollRef = useRef<HTMLDivElement>(null)
   const pageRef = useRef(page)
   const annotations = useLiveQuery(() => db.annotations.where('bookId').equals(book.id).toArray(), [book.id]) ?? []
+  const allVocabs = useLiveQuery(() => db.vocabularies.toArray(), []) ?? []
+
+  const savedWordsMap = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const v of allVocabs) {
+      const w = v.word.trim().toLowerCase()
+      if (w) m.set(w, v.meaningVi)
+    }
+    return m
+  }, [allVocabs])
 
   // Load PDF Document
   useEffect(() => {
@@ -63,40 +85,44 @@ export default function Reader({ book, onBack }: { book: Book; onBack: () => voi
     }
   }, [book.id])
 
-  // Fit width scale calculation (responsive for iPad / Mobile)
+  // Fit width scale calculation (supports 1-page and 2-page spread)
   useEffect(() => {
     const calc = () => {
-      const w = (scrollRef.current?.clientWidth ?? window.innerWidth) - 16
-      setFitScale(Math.max(0.3, w / base.w))
+      const containerW = (scrollRef.current?.clientWidth ?? window.innerWidth) - (twoPage ? 36 : 16)
+      const perPageW = twoPage ? containerW / 2 : containerW
+      setFitScale(Math.max(0.3, perPageW / base.w))
     }
     calc()
     window.addEventListener('resize', calc)
     return () => window.removeEventListener('resize', calc)
-  }, [base.w, panel])
+  }, [base.w, panel, twoPage])
 
   const scale = zoom === 0 ? fitScale : zoom
 
-  const goTo = useCallback((p: number, smooth = false) => {
-    if (p < 1 || !doc || p > doc.numPages) return
-    scrollRef.current
-      ?.querySelector(`[data-page="${p}"]`)
-      ?.scrollIntoView({ block: 'start', behavior: smooth ? 'smooth' : 'auto' })
-  }, [doc])
+  const goTo = useCallback(
+    (p: number, smooth = false, recordJump = false) => {
+      if (p < 1 || !doc || p > doc.numPages) return
+      if (recordJump && Math.abs(p - pageRef.current) > 1) {
+        setPrevJumpPage(pageRef.current)
+      }
+      scrollRef.current
+        ?.querySelector(`[data-page="${p}"]`)
+        ?.scrollIntoView({ block: 'start', behavior: smooth ? 'smooth' : 'auto' })
+    },
+    [doc],
+  )
 
   // Restore position on open + after zoom changes
   useEffect(() => {
     if (!doc) return
     const t = setTimeout(() => goTo(pageRef.current), 60)
     return () => clearTimeout(t)
-  }, [doc, scale, goTo])
+  }, [doc, scale, twoPage, goTo])
 
-  const onVisible = useCallback(
-    (p: number) => {
-      pageRef.current = p
-      setPage(p)
-    },
-    [],
-  )
+  const onVisible = useCallback((p: number) => {
+    pageRef.current = p
+    setPage(p)
+  }, [])
 
   useEffect(() => {
     if (!doc) return
@@ -104,7 +130,7 @@ export default function Reader({ book, onBack }: { book: Book; onBack: () => voi
     return () => clearTimeout(t)
   }, [page, zoom, doc, book.id])
 
-  // Enhanced Selection Engine with selectionchange (debounced) for iPad/iOS touch handles
+  // Selection Engine with selectionchange (debounced) for iPad/iOS touch handles
   useEffect(() => {
     let timer: number
 
@@ -200,9 +226,71 @@ export default function Reader({ book, onBack }: { book: Book; onBack: () => voi
     }
   }, [scale])
 
+  // Keyboard shortcuts for Mac / iPad Magic Keyboard
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+        goTo(pageRef.current + (twoPage ? 2 : 1))
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        goTo(pageRef.current - (twoPage ? 2 : 1))
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [goTo, twoPage])
+
   const doSearch = async () => {
     if (!doc || !query.trim()) return
     setResults(await searchText(doc, query.trim()))
+  }
+
+  // Ask Gemini Vision / AI about the current PDF page
+  const runPageAI = async (promptText: string) => {
+    if (!apiKey.trim()) {
+      setNeedKeyInline(true)
+      return
+    }
+    setAiPageLoading(true)
+    setNeedKeyInline(false)
+    setAiAnswer('')
+    try {
+      const pageEl = scrollRef.current?.querySelector(`[data-page="${page}"]`) as HTMLElement | null
+      const canvas = pageEl?.querySelector('canvas') as HTMLCanvasElement | null
+      let imageDataUrl: string | null = null
+      if (canvas && canvas.width > 0) {
+        imageDataUrl = canvas.toDataURL('image/jpeg', 0.78)
+      }
+      let pageText = (pageEl?.querySelector('.textLayer')?.textContent ?? '').replace(/\s+/g, ' ').trim()
+      if (!pageText && doc) {
+        const p = await doc.getPage(page)
+        const tc = await p.getTextContent()
+        pageText = tc.items.map((i: any) => i.str).join(' ')
+      }
+
+      const answer = await askPageAI({
+        imageDataUrl,
+        pageText,
+        pageNumber: page,
+        bookTitle: book.title,
+        question: promptText,
+      })
+      setAiAnswer(answer)
+    } catch (e: any) {
+      if (e.message === 'NO_API_KEY') {
+        setNeedKeyInline(true)
+      } else {
+        setAiAnswer('⚠ ' + e.message)
+      }
+    }
+    setAiPageLoading(false)
+  }
+
+  const handleBack = () => {
+    if (autoSync && githubToken.trim()) {
+      syncWithGist().catch(() => {})
+    }
+    onBack()
   }
 
   const pagesByAnn = useMemo(() => {
@@ -211,7 +299,6 @@ export default function Reader({ book, onBack }: { book: Book; onBack: () => voi
     return m
   }, [annotations])
 
-  // Open In-App Note Modal
   const openNoteModal = (a: Annotation) => {
     setEditingAnn(a)
     setNoteDraft(a.note || '')
@@ -244,7 +331,7 @@ export default function Reader({ book, onBack }: { book: Book; onBack: () => voi
         style={{ paddingLeft: depth * 14 + 8 }}
         onClick={() => {
           if (it.page) {
-            goTo(it.page)
+            goTo(it.page, false, true)
             if (window.innerWidth < 1024) setPanel(null)
           }
         }}
@@ -261,15 +348,15 @@ export default function Reader({ book, onBack }: { book: Book; onBack: () => voi
         <header className="safe-top z-30 flex items-center justify-between gap-1.5 border-b border-slate-700 bg-slate-900/95 px-3 py-2 text-sm backdrop-blur-md transition-all shadow-md">
           {/* Left: Back & Title */}
           <div className="flex items-center gap-1.5 min-w-0 flex-1">
-            <button className="icon-btn !min-h-[38px] !min-w-[38px]" onClick={onBack} title="Về thư viện">
+            <button className="icon-btn !min-h-[38px] !min-w-[38px]" onClick={handleBack} title="Về thư viện">
               <ArrowLeft size={18} />
             </button>
-            <div className="truncate font-semibold text-slate-100 max-w-[8rem] sm:max-w-xs md:max-w-md">
+            <div className="truncate font-semibold text-slate-100 max-w-[6.5rem] sm:max-w-xs md:max-w-md">
               {book.title}
             </div>
           </div>
 
-          {/* Center: Page Jump on Tablet/Desktop */}
+          {/* Center: Page Jump & Layout Controls on Tablet/Desktop */}
           <div className="hidden sm:flex items-center gap-1">
             <button
               className="icon-btn !min-w-[34px] !p-1.5"
@@ -286,7 +373,7 @@ export default function Reader({ book, onBack }: { book: Book; onBack: () => voi
                 min={1}
                 max={book.totalPages}
                 value={page}
-                onChange={(e) => goTo(Number(e.target.value))}
+                onChange={(e) => goTo(Number(e.target.value), false, true)}
                 className="w-10 bg-transparent text-center font-bold text-sky-400 outline-none"
               />
               <span className="text-slate-400">/ {book.totalPages}</span>
@@ -323,10 +410,31 @@ export default function Reader({ book, onBack }: { book: Book; onBack: () => voi
             >
               <ZoomIn size={16} />
             </button>
+
+            {/* Two-Page Spread Toggle (iPad Landscape / Mac) */}
+            <button
+              className={'icon-btn hidden md:inline-flex ' + (twoPage ? '!bg-sky-500 !text-slate-950' : '')}
+              onClick={() => {
+                setTwoPage(!twoPage)
+                setZoom(0)
+              }}
+              title="Xem 2 trang song song (iPad ngang / Desktop)"
+            >
+              <Columns2 size={16} />
+            </button>
           </div>
 
-          {/* Right: Theme Toggle & Panels (Compact & Touch Friendly) */}
+          {/* Right: Crop Margins, Theme, AI Copilot & Panels */}
           <div className="flex items-center gap-1">
+            {/* Crop Margins Toggle */}
+            <button
+              className={'icon-btn ' + (cropMargins ? '!bg-sky-500 !text-slate-950' : '')}
+              onClick={() => set({ cropMargins: !cropMargins })}
+              title="Cắt lề trắng thừa (Phóng to chữ sát mép)"
+            >
+              <Scissors size={16} />
+            </button>
+
             {/* Single cycle theme button on mobile */}
             <button
               className="icon-btn sm:hidden"
@@ -355,6 +463,20 @@ export default function Reader({ book, onBack }: { book: Book; onBack: () => voi
                 </button>
               ))}
             </div>
+
+            {/* AI Page Copilot Button */}
+            <button
+              className={
+                'icon-btn ' +
+                (panel === 'ai'
+                  ? '!bg-amber-400 !text-slate-950 font-bold'
+                  : 'text-amber-300 hover:text-amber-200')
+              }
+              onClick={() => setPanel(panel === 'ai' ? null : 'ai')}
+              title="Hỏi AI về Sơ đồ / Trang hiện tại"
+            >
+              <Sparkles size={17} />
+            </button>
 
             {/* Panel Buttons */}
             <button
@@ -401,12 +523,17 @@ export default function Reader({ book, onBack }: { book: Book; onBack: () => voi
 
         {/* Sidebar Drawer */}
         {panel && (
-          <aside className="fixed inset-y-0 left-0 z-40 w-80 max-w-[85vw] flex flex-col border-r border-slate-700 bg-slate-900/95 p-4 text-sm shadow-2xl backdrop-blur-md lg:static lg:z-10 animate-in slide-in-from-left duration-200">
+          <aside className="fixed inset-y-0 left-0 z-40 w-80 sm:w-96 max-w-[88vw] flex flex-col border-r border-slate-700 bg-slate-900/95 p-4 text-sm shadow-2xl backdrop-blur-md lg:static lg:z-10 animate-in slide-in-from-left duration-200">
             <div className="mb-3 flex items-center justify-between pb-2 border-b border-slate-800">
-              <span className="font-bold text-base text-sky-300">
-                {panel === 'outline' && 'Mục lục sách'}
-                {panel === 'search' && 'Tìm kiếm'}
-                {panel === 'notes' && 'Ghi chú & Highlight'}
+              <span className="font-bold text-base text-sky-300 flex items-center gap-1.5">
+                {panel === 'outline' && '📑 Mục lục sách'}
+                {panel === 'search' && '🔍 Tìm kiếm trong sách'}
+                {panel === 'notes' && '🖍️ Ghi chú & Highlight'}
+                {panel === 'ai' && (
+                  <>
+                    <Sparkles size={17} className="text-amber-400" /> AI Copilot · Trang {page}
+                  </>
+                )}
               </span>
               <button className="icon-btn !min-h-[32px] !min-w-[32px] !p-1" onClick={() => setPanel(null)}>
                 <X size={17} />
@@ -433,7 +560,7 @@ export default function Reader({ book, onBack }: { book: Book; onBack: () => voi
                     <button
                       key={i}
                       onClick={() => {
-                        goTo(r.page)
+                        goTo(r.page, false, true)
                         if (window.innerWidth < 1024) setPanel(null)
                       }}
                       className="mb-2 block w-full rounded-lg border border-slate-800 bg-slate-800/60 p-2.5 text-left hover:border-sky-500/60 active:bg-slate-700 transition"
@@ -457,7 +584,7 @@ export default function Reader({ book, onBack }: { book: Book; onBack: () => voi
                       <button
                         className="text-left w-full text-slate-200"
                         onClick={() => {
-                          goTo(a.pageNumber)
+                          goTo(a.pageNumber, false, true)
                           if (window.innerWidth < 1024) setPanel(null)
                         }}
                       >
@@ -478,6 +605,94 @@ export default function Reader({ book, onBack }: { book: Book; onBack: () => voi
                   {!annotations.length && <div className="p-6 text-center text-slate-400">Chưa có highlight hay ghi chú nào.</div>}
                 </>
               )}
+
+              {panel === 'ai' && (
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-slate-800 bg-slate-800/50 p-3 text-xs text-slate-300 leading-relaxed">
+                    AI sẽ tự động <b>chụp hình ảnh trang {page}</b> (bao gồm cả sơ đồ kiến trúc, bảng biểu, chữ viết tay) để phân tích cho bạn.
+                  </div>
+
+                  {/* Quick 1-click AI Prompts */}
+                  <div className="space-y-1.5">
+                    {[
+                      '📊 Giải thích chi tiết sơ đồ kiến trúc / hình minh họa ở trang này',
+                      '📝 Tóm tắt cô đọng các ý chính và thuật ngữ quan trọng của trang này',
+                      '💡 Giải thích bài tập hoặc tình huống (Sharpen your pencil) ở trang này',
+                    ].map((preset) => (
+                      <button
+                        key={preset}
+                        onClick={() => runPageAI(preset)}
+                        disabled={aiPageLoading}
+                        className="w-full rounded-xl border border-slate-700/80 bg-slate-800/90 p-2.5 text-left text-xs font-medium text-sky-200 hover:border-sky-500 hover:bg-slate-800 active:scale-[0.99] transition"
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Custom Question Input */}
+                  <div className="flex gap-1.5 pt-1">
+                    <input
+                      value={aiQuestion}
+                      onChange={(e) => setAiQuestion(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && aiQuestion.trim() && runPageAI(aiQuestion)}
+                      placeholder="Hỏi thêm bất kỳ điều gì về trang này…"
+                      className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-slate-100 outline-none focus:border-sky-500"
+                    />
+                    <button
+                      className="btn !bg-amber-500 hover:!bg-amber-400 text-slate-950 font-semibold !px-3"
+                      disabled={aiPageLoading || !aiQuestion.trim()}
+                      onClick={() => runPageAI(aiQuestion)}
+                    >
+                      <Send size={14} />
+                    </button>
+                  </div>
+
+                  {/* Inline API key prompt if not configured yet */}
+                  {needKeyInline && (
+                    <div className="rounded-xl border border-amber-500/60 bg-slate-800 p-3 text-xs space-y-2">
+                      <div className="font-semibold text-amber-300 flex items-center gap-1.5">
+                        <KeyRound size={15} /> Chưa có {aiProvider === 'gemini' ? 'Gemini' : 'OpenAI'} API Key
+                      </div>
+                      <div className="text-slate-400">
+                        Lấy miễn phí tại Google AI Studio rồi dán vào đây (chỉ cần nhập 1 lần):
+                      </div>
+                      <div className="flex gap-1.5">
+                        <input
+                          type="password"
+                          value={inlineKeyDraft}
+                          onChange={(e) => setInlineKeyDraft(e.target.value)}
+                          placeholder="AIzaSy..."
+                          className="min-w-0 flex-1 rounded-lg border border-slate-600 bg-slate-900 px-2.5 py-1.5 text-xs text-slate-100 outline-none"
+                        />
+                        <button
+                          className="btn !bg-sky-600 text-white text-xs"
+                          onClick={() => {
+                            if (inlineKeyDraft.trim()) {
+                              set({ apiKey: inlineKeyDraft.trim() })
+                              setNeedKeyInline(false)
+                            }
+                          }}
+                        >
+                          Lưu Key
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {aiPageLoading && (
+                    <div className="rounded-xl border border-slate-800 bg-slate-800/60 p-4 text-center text-xs text-amber-300 animate-pulse">
+                      🤖 AI đang đọc hình ảnh & nội dung trang {page}…
+                    </div>
+                  )}
+
+                  {aiAnswer && (
+                    <div className="whitespace-pre-wrap rounded-xl border border-slate-700 bg-slate-800/90 p-3.5 text-xs leading-relaxed text-slate-100 shadow-inner">
+                      {aiAnswer}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </aside>
         )}
@@ -487,7 +702,6 @@ export default function Reader({ book, onBack }: { book: Book; onBack: () => voi
           ref={scrollRef}
           className={`flex-1 overflow-auto p-2 sm:p-4 ${bg} touch-pan-y`}
           onClick={() => {
-            // Tap on background to toggle toolbar if no text selection
             const s = window.getSelection()
             if (!s || s.isCollapsed) {
               setShowToolbar((prev) => !prev)
@@ -495,24 +709,52 @@ export default function Reader({ book, onBack }: { book: Book; onBack: () => voi
           }}
         >
           {doc ? (
-            Array.from({ length: doc.numPages }, (_, i) => (
-              <PageView
-                key={i + 1}
-                doc={doc}
-                pageNum={i + 1}
-                scale={scale}
-                baseSize={base}
-                theme={theme}
-                annotations={pagesByAnn.get(i + 1) ?? []}
-                onVisible={onVisible}
-                onAnnotationClick={openNoteModal}
-              />
-            ))
+            <div className={twoPage ? 'grid grid-cols-1 md:grid-cols-2 gap-3 items-start max-w-full mx-auto' : ''}>
+              {Array.from({ length: doc.numPages }, (_, i) => (
+                <PageView
+                  key={i + 1}
+                  doc={doc}
+                  pageNum={i + 1}
+                  scale={scale}
+                  baseSize={base}
+                  theme={theme}
+                  annotations={pagesByAnn.get(i + 1) ?? []}
+                  cropMargins={cropMargins}
+                  savedWords={savedWordsMap}
+                  underlineVocab={underlineVocab}
+                  onVisible={onVisible}
+                  onAnnotationClick={openNoteModal}
+                />
+              ))}
+            </div>
           ) : (
             <div className="flex h-64 items-center justify-center text-slate-400">Đang tải tài liệu PDF…</div>
           )}
         </div>
       </div>
+
+      {/* Floating "Jump Back" pill when user jumps to another section */}
+      {prevJumpPage !== null && prevJumpPage !== page && (
+        <div className="fixed bottom-16 left-4 z-30 flex items-center gap-1 rounded-full border border-sky-500/60 bg-slate-900/95 px-3 py-1.5 text-xs font-semibold text-sky-300 shadow-2xl backdrop-blur-md">
+          <button
+            className="flex items-center gap-1.5 hover:text-white active:scale-95 transition"
+            onClick={() => {
+              const target = prevJumpPage
+              setPrevJumpPage(page)
+              goTo(target, false, false)
+            }}
+          >
+            <Undo2 size={14} /> Quay về tr. {prevJumpPage}
+          </button>
+          <button
+            className="ml-1 rounded-full p-0.5 text-slate-400 hover:text-slate-200"
+            onClick={() => setPrevJumpPage(null)}
+            title="Ẩn"
+          >
+            <X size={13} />
+          </button>
+        </div>
+      )}
 
       {/* Bottom Floating Scrubber / Page Slider for iPad & Mobile */}
       {showToolbar && doc && (
@@ -523,7 +765,7 @@ export default function Reader({ book, onBack }: { book: Book; onBack: () => voi
             min={1}
             max={book.totalPages}
             value={page}
-            onChange={(e) => goTo(Number(e.target.value))}
+            onChange={(e) => goTo(Number(e.target.value), false, true)}
             className="w-full accent-sky-400 cursor-pointer h-2 bg-slate-700 rounded-lg"
           />
           <span className="text-slate-400 whitespace-nowrap">/ {book.totalPages}</span>
@@ -546,7 +788,7 @@ export default function Reader({ book, onBack }: { book: Book; onBack: () => voi
         <SelectionPopup sel={sel} bookId={book.id} bookTitle={book.title} onClose={() => setSel(null)} />
       )}
 
-      {/* In-App Note Modal (Touch Friendly, No window.prompt) */}
+      {/* In-App Note Modal */}
       {editingAnn && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl animate-in zoom-in-95 duration-150">
