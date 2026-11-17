@@ -4,10 +4,33 @@
 
 @layer components {
   .btn {
-    @apply inline-flex items-center gap-1 rounded bg-slate-700 px-2 py-1 text-sm hover:bg-slate-600 disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg bg-slate-700 px-3 py-2 text-sm font-medium hover:bg-slate-600 active:scale-95 transition-all disabled:opacity-50 touch-manipulation select-none md:py-1.5 md:px-2.5;
+  }
+  .icon-btn {
+    @apply inline-flex items-center justify-center rounded-lg bg-slate-700/80 p-2 text-slate-200 hover:bg-slate-600 active:scale-95 transition-all disabled:opacity-50 touch-manipulation select-none min-h-[38px] min-w-[38px] md:min-h-[32px] md:min-w-[32px];
   }
 }
 
-html, body { overscroll-behavior: none; }
-.textLayer { line-height: 1; }
-.textLayer ::selection { background: rgba(56, 189, 248, 0.4); }
+html, body {
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Allow text selection specifically in textLayer */
+.textLayer {
+  line-height: 1;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.textLayer ::selection {
+  background: rgba(56, 189, 248, 0.45);
+}
+
+/* Safe areas */
+.safe-top {
+  padding-top: max(8px, env(safe-area-inset-top));
+}
+.safe-bottom {
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+}

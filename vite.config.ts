@@ -10,7 +10,14 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icons/icon.svg', 'it-glossary.json', 'head-first-software-architecture-deck.json'],
+      includeAssets: [
+        'icons/icon.svg',
+        'icons/apple-touch-icon.png',
+        'icons/icon-192.png',
+        'icons/icon-512.png',
+        'it-glossary.json',
+        'head-first-software-architecture-deck.json',
+      ],
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,json,mjs,png,woff2}'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
@@ -22,8 +29,11 @@ export default defineConfig({
         theme_color: '#0f172a',
         background_color: '#0f172a',
         display: 'standalone',
+        orientation: 'any',
         start_url: base,
         icons: [
+          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
           { src: 'icons/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' },
         ],
       },

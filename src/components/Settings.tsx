@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSettings } from '../stores/useSettingsStore'
 import { exportBackup, importBackup } from '../services/exportService'
+import { Sparkles, Volume2, Save, HardDrive } from 'lucide-react'
 
 export default function Settings() {
   const s = useSettings()
@@ -18,44 +19,67 @@ export default function Settings() {
   }, [])
 
   return (
-    <div className="mx-auto max-w-xl space-y-6 p-4 text-sm">
-      <section>
-        <h2 className="mb-2 text-lg font-semibold">AI (BYOK)</h2>
+    <div className="safe-top pb-28 mx-auto max-w-xl space-y-6 p-4 sm:p-6 text-sm">
+      <section className="rounded-2xl border border-slate-800 bg-slate-800/60 p-5 shadow-sm">
+        <h2 className="mb-3 text-base font-bold text-sky-300 flex items-center gap-2">
+          <Sparkles size={18} className="text-amber-400" /> AI Dịch & Giải thích IT (BYOK)
+        </h2>
+        <label className="block text-xs text-slate-400 mb-1">Mô hình AI</label>
         <select
           value={s.aiProvider}
           onChange={(e) => s.set({ aiProvider: e.target.value as 'gemini' | 'openai' })}
-          className="mb-2 w-full rounded bg-slate-800 p-2"
+          className="mb-3 w-full rounded-xl border border-slate-700 bg-slate-800 p-3 text-slate-200 outline-none"
         >
-          <option value="gemini">Gemini (gemini-2.0-flash)</option>
+          <option value="gemini">Google Gemini (gemini-2.0-flash - Khuyên dùng)</option>
           <option value="openai">OpenAI (gpt-4o-mini)</option>
         </select>
+        <label className="block text-xs text-slate-400 mb-1">API Key</label>
         <input
           type="password"
           value={s.apiKey}
           onChange={(e) => s.set({ apiKey: e.target.value })}
-          placeholder="API key (chỉ lưu trong trình duyệt này)"
-          className="w-full rounded bg-slate-800 p-2"
+          placeholder="Nhập API key của bạn (chỉ lưu cục bộ trên thiết bị)"
+          className="w-full rounded-xl border border-slate-700 bg-slate-800 p-3 text-slate-100 outline-none focus:border-sky-500"
         />
+        <div className="mt-2 text-[11px] text-slate-400">
+          Khóa API được mã hóa và chỉ lưu trên trình duyệt máy bạn, không bao giờ gửi đi đâu khác.
+        </div>
       </section>
-      <section>
-        <h2 className="mb-2 text-lg font-semibold">Đọc to (TTS)</h2>
-        <input
-          type="range"
-          min={0.8}
-          max={1.5}
-          step={0.1}
-          value={s.ttsRate}
-          onChange={(e) => s.set({ ttsRate: Number(e.target.value) })}
-          className="w-full"
-        />
-        <div>Tốc độ: {s.ttsRate.toFixed(1)}x</div>
+
+      <section className="rounded-2xl border border-slate-800 bg-slate-800/60 p-5 shadow-sm">
+        <h2 className="mb-3 text-base font-bold text-sky-300 flex items-center gap-2">
+          <Volume2 size={18} /> Đọc phát âm tiếng Anh (TTS)
+        </h2>
+        <div className="flex items-center gap-4">
+          <input
+            type="range"
+            min={0.8}
+            max={1.5}
+            step={0.1}
+            value={s.ttsRate}
+            onChange={(e) => s.set({ ttsRate: Number(e.target.value) })}
+            className="flex-1 accent-sky-400 cursor-pointer h-2 bg-slate-700 rounded-lg"
+          />
+          <span className="font-mono text-sm font-bold text-sky-400 w-12 text-right">
+            {s.ttsRate.toFixed(1)}x
+          </span>
+        </div>
       </section>
-      <section>
-        <h2 className="mb-2 text-lg font-semibold">Sao lưu & Khôi phục</h2>
-        <div className="flex flex-wrap gap-2">
-          <button className="btn !py-2" onClick={() => exportBackup(false)}>Xuất JSON (không kèm PDF)</button>
-          <button className="btn !py-2" onClick={() => exportBackup(true)}>Xuất JSON (kèm PDF)</button>
-          <button className="btn !py-2" onClick={() => file.current?.click()}>Nhập JSON</button>
+
+      <section className="rounded-2xl border border-slate-800 bg-slate-800/60 p-5 shadow-sm">
+        <h2 className="mb-3 text-base font-bold text-sky-300 flex items-center gap-2">
+          <Save size={18} /> Sao lưu & Phục hồi dữ liệu
+        </h2>
+        <div className="flex flex-wrap gap-2.5">
+          <button className="btn !min-h-[40px]" onClick={() => exportBackup(false)}>
+            Xuất JSON (Metadata & Từ vựng)
+          </button>
+          <button className="btn !min-h-[40px]" onClick={() => exportBackup(true)}>
+            Xuất JSON (Kèm toàn bộ PDF)
+          </button>
+          <button className="btn !min-h-[40px] !bg-sky-600 hover:!bg-sky-500 text-white" onClick={() => file.current?.click()}>
+            Nhập file JSON sao lưu
+          </button>
           <input
             ref={file}
             type="file"
@@ -65,25 +89,30 @@ export default function Settings() {
               const f = e.target.files?.[0]
               if (f) {
                 await importBackup(f)
-                alert('Đã khôi phục dữ liệu')
+                alert('Đã khôi phục dữ liệu thành công!')
               }
             }}
           />
         </div>
       </section>
-      <section>
-        <h2 className="mb-2 text-lg font-semibold">Lưu trữ</h2>
-        <div>Đang dùng: {usage || 'không rõ'}</div>
-        <div>Persistent: {persisted === null ? 'không hỗ trợ' : persisted ? 'Có ✓' : 'Chưa'}</div>
+
+      <section className="rounded-2xl border border-slate-800 bg-slate-800/60 p-5 shadow-sm">
+        <h2 className="mb-3 text-base font-bold text-sky-300 flex items-center gap-2">
+          <HardDrive size={18} /> Bộ nhớ & Lưu trữ Offline
+        </h2>
+        <div className="space-y-1.5 text-slate-300 text-xs">
+          <div>Dung lượng đã sử dụng: <b className="text-slate-100">{usage || 'đang tính…'}</b></div>
+          <div>Lưu trữ bền vững (Persistent): <b className="text-slate-100">{persisted === null ? 'không hỗ trợ' : persisted ? 'Đã kích hoạt ✓' : 'Chưa'}</b></div>
+        </div>
         {persisted === false && (
           <button
-            className="btn mt-2 !py-2"
+            className="btn mt-3 !min-h-[40px] !bg-sky-600 text-white"
             onClick={async () => {
               await navigator.storage.persist()
               refresh()
             }}
           >
-            Yêu cầu lưu bền vững
+            Yêu cầu lưu bền vững (Tránh bị Safari xoá)
           </button>
         )}
       </section>

@@ -19,26 +19,34 @@ export default function App() {
   if (book) return <Reader book={book} onBack={() => setBook(null)} />
 
   const tabs: { t: Tab; label: string; icon: JSX.Element }[] = [
-    { t: 'library', label: 'Thư viện', icon: <LibIcon size={18} /> },
-    { t: 'vocab', label: 'Từ vựng', icon: <BrainCircuit size={18} /> },
-    { t: 'settings', label: 'Cài đặt', icon: <Cog size={18} /> },
+    { t: 'library', label: 'Thư viện', icon: <LibIcon size={20} /> },
+    { t: 'vocab', label: 'Từ vựng', icon: <BrainCircuit size={20} /> },
+    { t: 'settings', label: 'Cài đặt', icon: <Cog size={20} /> },
   ]
+
   return (
-    <div className="flex min-h-[100dvh] flex-col">
-      <main className="flex-1 pb-16">
+    <div className="flex min-h-[100dvh] flex-col bg-slate-900 text-slate-100">
+      <main className="flex-1 pb-20">
         {tab === 'library' && <Library onOpen={setBook} />}
         {tab === 'vocab' && <Vocab />}
         {tab === 'settings' && <Settings />}
       </main>
-      <nav className="fixed inset-x-0 bottom-0 flex border-t border-slate-700 bg-slate-800 pb-[env(safe-area-inset-bottom)]">
+
+      {/* Modern Bottom Navigation with iOS/iPad safe area */}
+      <nav className="fixed inset-x-0 bottom-0 z-20 flex items-center justify-around border-t border-slate-800 bg-slate-900/95 px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-md shadow-2xl">
         {tabs.map(({ t, label, icon }) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={'flex flex-1 flex-col items-center gap-0.5 py-2 text-xs ' + (tab === t ? 'text-sky-400' : 'text-slate-400')}
+            className={
+              'flex flex-1 flex-col items-center justify-center gap-1 rounded-xl py-1.5 transition-all touch-manipulation select-none ' +
+              (tab === t
+                ? 'text-sky-400 font-bold bg-slate-800/60'
+                : 'text-slate-400 hover:text-slate-200 active:scale-95')
+            }
           >
             {icon}
-            {label}
+            <span className="text-[11px] leading-tight">{label}</span>
           </button>
         ))}
       </nav>
