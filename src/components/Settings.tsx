@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { usePWAInstall } from '../hooks/usePWAInstall'
 import InstallGuideModal from './InstallGuideModal'
+import { listAvailableGeminiModels } from '../services/aiService'
 
 export default function Settings() {
   const s = useSettings()
@@ -17,6 +18,8 @@ export default function Settings() {
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState('')
   const [copiedLink, setCopiedLink] = useState(false)
+  const [testingKey, setTestingKey] = useState(false)
+  const [keyTestMsg, setKeyTestMsg] = useState('')
   const file = useRef<HTMLInputElement>(null)
 
   const refresh = async () => {
@@ -180,17 +183,60 @@ export default function Settings() {
           onChange={(e) => s.set({ aiProvider: e.target.value as 'gemini' | 'openai' })}
           className="mb-3 w-full rounded-xl border border-slate-700 bg-slate-800 p-3 text-slate-200 outline-none"
         >
-          <option value="gemini">Google Gemini (Gemini 1.5 Flash / Tự động - Miễn phí, đọc cả ảnh Sơ đồ)</option>
+          <option value="gemini">Google Gemini (Tự động chọn Model mới nhất: 2.5 Flash / 2.0 Flash - Miễn phí)</option>
           <option value="openai">OpenAI (GPT-4o Mini)</option>
         </select>
         <label className="block text-xs text-slate-400 mb-1">API Key</label>
-        <input
-          type="password"
-          value={s.apiKey}
-          onChange={(e) => s.set({ apiKey: e.target.value })}
-          placeholder="Dán mã AIzaSy... (Gemini) hoặc sk-... (OpenAI)"
-          className="w-full rounded-xl border border-slate-700 bg-slate-800 p-3 text-slate-100 outline-none focus:border-sky-500 font-mono text-xs"
-        />
+        <div className="flex gap-2">
+          <input
+            type="password"
+            value={s.apiKey}
+            onChange={(e) => {
+              s.set({ apiKey: e.target.value })
+              setKeyTestMsg('')
+            }}
+            placeholder="Dán mã AIzaSy... (Gemini) hoặc sk-... (OpenAI)"
+            className="flex-1 rounded-xl border border-slate-700 bg-slate-800 p-3 text-slate-100 outline-none focus:border-sky-500 font-mono text-xs"
+          />
+          {s.aiProvider === 'gemini' && (
+            <button
+              type="button"
+              disabled={testingKey || !s.apiKey.trim()}
+              onClick={async () => {
+                setTestingKey(true)
+                setKeyTestMsg('')
+                try {
+                  const models = await listAvailableGeminiModels(s.apiKey)
+                  if (models.length > 0) {
+                    setKeyTestMsg(
+                      `✓ Key hợp lệ! Sẵn sàng dùng model: ${models.slice(0, 3).map((m) => m.model).join(', ')}`,
+                    )
+                  } else {
+                    setKeyTestMsg('⚠ Key không tìm thấy model nào hỗ trợ generateContent.')
+                  }
+                } catch (err: any) {
+                  setKeyTestMsg('⚠ ' + err.message)
+                }
+                setTestingKey(false)
+              }}
+              className="btn !min-h-[42px] shrink-0 text-xs border border-sky-500/40 text-sky-300"
+            >
+              {testingKey ? 'Đang dò…' : 'Kiểm tra Key'}
+            </button>
+          )}
+        </div>
+        {keyTestMsg && (
+          <div
+            className={
+              'mt-2 rounded-xl p-2.5 text-xs font-medium ' +
+              (keyTestMsg.startsWith('✓')
+                ? 'bg-emerald-950/70 border border-emerald-500/40 text-emerald-200'
+                : 'bg-rose-950/70 border border-rose-500/40 text-rose-200')
+            }
+          >
+            {keyTestMsg}
+          </div>
+        )}
         <div className="mt-2 text-[11px] text-slate-400">
           💡 Mỗi từ được AI giải thích sẽ tự động lưu vào bộ nhớ đệm (AI Cache) để lần sau hiện tức thì.
         </div>

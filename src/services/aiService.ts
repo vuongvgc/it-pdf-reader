@@ -15,67 +15,131 @@ export async function lookupAICache(text: string): Promise<string | null> {
   return item?.explanation ?? null
 }
 
-let resolvedGeminiEndpoint: { version: string; model: string } | null = null
+interface GeminiTarget {
+  version: 'v1beta' | 'v1'
+  model: string
+}
 
-async function discoverWorkingGeminiModel(apiKey: string): Promise<{ version: string; model: string } | null> {
-  const versions = ['v1', 'v1beta']
-  for (const ver of versions) {
+let cachedWorkingTarget: GeminiTarget | null = null
+let cachedKeyUsed = ''
+
+function scoreGeminiModel(modelId: string): number {
+  let score = 0
+  if (modelId.includes('flash')) score += 100
+  if (modelId.includes('pro')) score += 50
+
+  if (modelId.includes('2.5')) score += 45
+  else if (modelId.includes('3.')) score += 50
+  else if (modelId.includes('2.0')) score += 35
+  else if (modelId.includes('latest')) score += 25
+  else if (modelId.includes('1.5')) score += 10
+
+  if (!modelId.includes('exp') && !modelId.includes('preview')) score += 20
+  if (modelId === 'gemini-2.5-flash') score += 60
+  if (modelId === 'gemini-2.0-flash') score += 45
+  if (modelId === 'gemini-flash-latest') score += 40
+  if (modelId === 'gemini-2.5-flash-lite') score += 35
+  return score
+}
+
+/**
+ * Calls ModelService.ListModels on v1beta and v1 to get the exact list of models
+ * enabled for this API key that support `generateContent`.
+ */
+export async function listAvailableGeminiModels(apiKey: string): Promise<GeminiTarget[]> {
+  const key = apiKey.trim()
+  const versions: Array<'v1beta' | 'v1'> = ['v1beta', 'v1']
+  const seen = new Set<string>()
+  const targets: GeminiTarget[] = []
+  let authError = ''
+
+  for (const version of versions) {
     try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/${ver}/models?key=${apiKey.trim()}`)
-      if (res.ok) {
-        const data = await res.json()
-        const models: any[] = data.models || []
-        const validModels = models.filter(
-          (m) =>
-            Array.isArray(m.supportedGenerationMethods) &&
-            m.supportedGenerationMethods.includes('generateContent'),
-        )
-        const best =
-          validModels.find((m) => m.name.includes('gemini-1.5-flash')) ||
-          validModels.find((m) => m.name.includes('gemini-2.0-flash')) ||
-          validModels.find((m) => m.name.includes('flash')) ||
-          validModels.find((m) => m.name.includes('pro')) ||
-          validModels[0]
+      const res = await fetch(`https://generativelanguage.googleapis.com/${version}/models?key=${key}`)
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null)
+        const msg = errJson?.error?.message || `HTTP ${res.status}`
+        if (res.status === 400 || res.status === 403) {
+          authError = msg
+        }
+        continue
+      }
 
-        if (best) {
-          const cleanModel = best.name.replace(/^models\//, '')
-          return { version: ver, model: cleanModel }
+      const data = await res.json()
+      const models: any[] = data.models || []
+
+      for (const m of models) {
+        const rawName: string = m.name || ''
+        const methods: string[] = m.supportedGenerationMethods || []
+        if (!methods.includes('generateContent')) continue
+        if (!rawName.startsWith('models/gemini')) continue
+
+        const model = rawName.replace(/^models\//, '')
+        // Exclude specialized non-text models (TTS, imagen, audio-only, etc.)
+        if (/(-tts|image-generation|robotics|computer-use|embedding|aqa|vision|veo|imagen|learnlm)/i.test(model)) {
+          continue
+        }
+
+        if (!seen.has(model)) {
+          seen.add(model)
+          targets.push({ version, model })
         }
       }
     } catch {
-      // Continue to next version
+      // Ignore network error for one version and try next
     }
   }
-  return null
+
+  if (targets.length === 0 && authError) {
+    throw new Error(`Google API: ${authError}`)
+  }
+
+  targets.sort((a, b) => scoreGeminiModel(b.model) - scoreGeminiModel(a.model))
+  return targets
 }
 
 /**
  * Universal Gemini API caller:
- * 1. Checks v1 stable endpoint (gemini-1.5-flash)
- * 2. Falls back to v1beta endpoints
- * 3. If needed, dynamically discovers the exact model list provisioned for this user's API key
+ * Queries `ListModels` first to discover exact models supported by the user's API key,
+ * then calls `generateContent` with automatic fallback across available models.
  */
 async function callGemini(apiKey: string, parts: any[]): Promise<string> {
   const key = apiKey.trim()
   if (!key) throw new Error('NO_API_KEY')
 
-  const candidates: Array<{ version: string; model: string }> = []
-  if (resolvedGeminiEndpoint) {
-    candidates.push(resolvedGeminiEndpoint)
+  if (cachedKeyUsed !== key) {
+    cachedWorkingTarget = null
+    cachedKeyUsed = key
   }
-  candidates.push(
-    { version: 'v1', model: 'gemini-1.5-flash' },
-    { version: 'v1beta', model: 'gemini-1.5-flash' },
-    { version: 'v1beta', model: 'gemini-2.0-flash' },
-    { version: 'v1', model: 'gemini-1.5-pro' },
-    { version: 'v1', model: 'gemini-pro' },
-  )
 
-  let lastError = ''
+  // 1. Discover available models directly from Google's ModelService.ListModels
+  let targets: GeminiTarget[] = []
+  if (cachedWorkingTarget) {
+    targets.push(cachedWorkingTarget)
+  }
 
-  for (const { version, model } of candidates) {
+  const discovered = await listAvailableGeminiModels(key)
+  for (const d of discovered) {
+    if (!targets.some((t) => t.model === d.model && t.version === d.version)) {
+      targets.push(d)
+    }
+  }
+
+  // Fallback list only if ListModels returned empty for any unexpected reason
+  if (targets.length === 0) {
+    targets = [
+      { version: 'v1beta', model: 'gemini-2.5-flash' },
+      { version: 'v1beta', model: 'gemini-2.0-flash' },
+      { version: 'v1beta', model: 'gemini-flash-latest' },
+    ]
+  }
+
+  let firstMeaningfulError = ''
+
+  // Try up to 6 best matching models
+  for (const target of targets.slice(0, 6)) {
     try {
-      const url = `https://generativelanguage.googleapis.com/${version}/models/${model}:generateContent?key=${key}`
+      const url = `https://generativelanguage.googleapis.com/${target.version}/models/${target.model}:generateContent?key=${key}`
       const r = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -84,49 +148,36 @@ async function callGemini(apiKey: string, parts: any[]): Promise<string> {
 
       if (r.ok) {
         const j = await r.json()
-        resolvedGeminiEndpoint = { version, model }
+        cachedWorkingTarget = target
         const text = j.candidates?.[0]?.content?.parts?.[0]?.text
         return text ?? '(không có phản hồi)'
       }
 
       const errJson = await r.json().catch(() => null)
       const message = errJson?.error?.message || `Mã lỗi HTTP ${r.status}`
-      lastError = message
 
-      // If 404 (model not found for this API version), try the next candidate
-      if (r.status === 404) {
-        continue
+      // If key is invalid (400 API_KEY_INVALID), stop immediately
+      if (r.status === 400 && /api key/i.test(message)) {
+        throw new Error(`Google API Key không hợp lệ: ${message}`)
       }
 
-      // If key is invalid (400) or permission denied (403), stop immediately with clear message
-      throw new Error(`Google API: ${message}`)
+      if (!firstMeaningfulError) {
+        firstMeaningfulError = `[${target.model}] ${message}`
+      }
+
+      // If 404 (not found), 429 (quota 0 on specific tier), or 503 (overloaded), try next available model
+      continue
     } catch (e: any) {
-      if (e.message && e.message.startsWith('Google API:')) {
+      if (e.message && e.message.startsWith('Google API')) {
         throw e
       }
-      lastError = e.message
+      if (!firstMeaningfulError) {
+        firstMeaningfulError = e.message
+      }
     }
   }
 
-  // Dynamic discovery fallback if all hardcoded endpoints gave 404
-  const discovered = await discoverWorkingGeminiModel(key)
-  if (discovered) {
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/${discovered.version}/models/${discovered.model}:generateContent?key=${key}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts }] }),
-      },
-    )
-    if (r.ok) {
-      const j = await r.json()
-      resolvedGeminiEndpoint = discovered
-      return j.candidates?.[0]?.content?.parts?.[0]?.text ?? '(không có phản hồi)'
-    }
-  }
-
-  throw new Error(`Gemini: ${lastError || 'Không thể kết nối tới mô hình AI'}`)
+  throw new Error(`Gemini: ${firstMeaningfulError || 'Không tìm thấy model khả dụng cho API Key này'}`)
 }
 
 export async function explainIT(opts: {
