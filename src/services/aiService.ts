@@ -15,28 +15,76 @@ export async function lookupAICache(text: string): Promise<string | null> {
   return item?.explanation ?? null
 }
 
+let resolvedGeminiEndpoint: { version: string; model: string } | null = null
+
+async function discoverWorkingGeminiModel(apiKey: string): Promise<{ version: string; model: string } | null> {
+  const versions = ['v1', 'v1beta']
+  for (const ver of versions) {
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/${ver}/models?key=${apiKey.trim()}`)
+      if (res.ok) {
+        const data = await res.json()
+        const models: any[] = data.models || []
+        const validModels = models.filter(
+          (m) =>
+            Array.isArray(m.supportedGenerationMethods) &&
+            m.supportedGenerationMethods.includes('generateContent'),
+        )
+        const best =
+          validModels.find((m) => m.name.includes('gemini-1.5-flash')) ||
+          validModels.find((m) => m.name.includes('gemini-2.0-flash')) ||
+          validModels.find((m) => m.name.includes('flash')) ||
+          validModels.find((m) => m.name.includes('pro')) ||
+          validModels[0]
+
+        if (best) {
+          const cleanModel = best.name.replace(/^models\//, '')
+          return { version: ver, model: cleanModel }
+        }
+      }
+    } catch {
+      // Continue to next version
+    }
+  }
+  return null
+}
+
 /**
  * Universal Gemini API caller:
- * Tries `gemini-1.5-flash` first (stable & universally available for all keys),
- * then falls back to `gemini-2.0-flash` or other variants if 404 model not found.
+ * 1. Checks v1 stable endpoint (gemini-1.5-flash)
+ * 2. Falls back to v1beta endpoints
+ * 3. If needed, dynamically discovers the exact model list provisioned for this user's API key
  */
 async function callGemini(apiKey: string, parts: any[]): Promise<string> {
-  const models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro']
+  const key = apiKey.trim()
+  if (!key) throw new Error('NO_API_KEY')
+
+  const candidates: Array<{ version: string; model: string }> = []
+  if (resolvedGeminiEndpoint) {
+    candidates.push(resolvedGeminiEndpoint)
+  }
+  candidates.push(
+    { version: 'v1', model: 'gemini-1.5-flash' },
+    { version: 'v1beta', model: 'gemini-1.5-flash' },
+    { version: 'v1beta', model: 'gemini-2.0-flash' },
+    { version: 'v1', model: 'gemini-1.5-pro' },
+    { version: 'v1', model: 'gemini-pro' },
+  )
+
   let lastError = ''
 
-  for (const model of models) {
+  for (const { version, model } of candidates) {
     try {
-      const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts }] }),
-        },
-      )
+      const url = `https://generativelanguage.googleapis.com/${version}/models/${model}:generateContent?key=${key}`
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts }] }),
+      })
 
       if (r.ok) {
         const j = await r.json()
+        resolvedGeminiEndpoint = { version, model }
         const text = j.candidates?.[0]?.content?.parts?.[0]?.text
         return text ?? '(không có phản hồi)'
       }
@@ -45,22 +93,40 @@ async function callGemini(apiKey: string, parts: any[]): Promise<string> {
       const message = errJson?.error?.message || `Mã lỗi HTTP ${r.status}`
       lastError = message
 
-      // If model not found (404), try the next fallback model in the list
+      // If 404 (model not found for this API version), try the next candidate
       if (r.status === 404) {
         continue
       }
 
-      // If key is invalid (400), quota exceeded (429), or unauthorized (403), throw readable error
-      throw new Error(message)
+      // If key is invalid (400) or permission denied (403), stop immediately with clear message
+      throw new Error(`Google API: ${message}`)
     } catch (e: any) {
-      if (e.message && !e.message.startsWith('Mã lỗi HTTP 404')) {
+      if (e.message && e.message.startsWith('Google API:')) {
         throw e
       }
       lastError = e.message
     }
   }
 
-  throw new Error(`Gemini API: ${lastError || 'Không thể kết nối tới mô hình AI'}`)
+  // Dynamic discovery fallback if all hardcoded endpoints gave 404
+  const discovered = await discoverWorkingGeminiModel(key)
+  if (discovered) {
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/${discovered.version}/models/${discovered.model}:generateContent?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts }] }),
+      },
+    )
+    if (r.ok) {
+      const j = await r.json()
+      resolvedGeminiEndpoint = discovered
+      return j.candidates?.[0]?.content?.parts?.[0]?.text ?? '(không có phản hồi)'
+    }
+  }
+
+  throw new Error(`Gemini: ${lastError || 'Không thể kết nối tới mô hình AI'}`)
 }
 
 export async function explainIT(opts: {
