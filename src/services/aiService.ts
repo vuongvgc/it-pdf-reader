@@ -15,6 +15,54 @@ export async function lookupAICache(text: string): Promise<string | null> {
   return item?.explanation ?? null
 }
 
+/**
+ * Universal Gemini API caller:
+ * Tries `gemini-1.5-flash` first (stable & universally available for all keys),
+ * then falls back to `gemini-2.0-flash` or other variants if 404 model not found.
+ */
+async function callGemini(apiKey: string, parts: any[]): Promise<string> {
+  const models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro']
+  let lastError = ''
+
+  for (const model of models) {
+    try {
+      const r = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts }] }),
+        },
+      )
+
+      if (r.ok) {
+        const j = await r.json()
+        const text = j.candidates?.[0]?.content?.parts?.[0]?.text
+        return text ?? '(không có phản hồi)'
+      }
+
+      const errJson = await r.json().catch(() => null)
+      const message = errJson?.error?.message || `Mã lỗi HTTP ${r.status}`
+      lastError = message
+
+      // If model not found (404), try the next fallback model in the list
+      if (r.status === 404) {
+        continue
+      }
+
+      // If key is invalid (400), quota exceeded (429), or unauthorized (403), throw readable error
+      throw new Error(message)
+    } catch (e: any) {
+      if (e.message && !e.message.startsWith('Mã lỗi HTTP 404')) {
+        throw e
+      }
+      lastError = e.message
+    }
+  }
+
+  throw new Error(`Gemini API: ${lastError || 'Không thể kết nối tới mô hình AI'}`)
+}
+
 export async function explainIT(opts: {
   text: string
   context: string
@@ -43,17 +91,7 @@ Hãy:
 
   let reply = ''
   if (aiProvider === 'gemini') {
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey.trim()}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-      },
-    )
-    if (!r.ok) throw new Error(`Gemini API lỗi (${r.status}). Kiểm tra lại API Key.`)
-    const j = await r.json()
-    reply = j.candidates?.[0]?.content?.parts?.[0]?.text ?? '(không có phản hồi)'
+    reply = await callGemini(apiKey, [{ text: prompt }])
   } else {
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -63,12 +101,15 @@ Hãy:
         messages: [{ role: 'user', content: prompt }],
       }),
     })
-    if (!r.ok) throw new Error(`OpenAI API lỗi (${r.status}). Kiểm tra lại API Key.`)
+    if (!r.ok) {
+      const errJson = await r.json().catch(() => null)
+      throw new Error(`OpenAI API: ${errJson?.error?.message || `Mã lỗi ${r.status}`}`)
+    }
     const j = await r.json()
     reply = j.choices?.[0]?.message?.content ?? '(không có phản hồi)'
   }
 
-  if (isShortTerm && reply && !reply.startsWith('(')) {
+  if (isShortTerm && reply && !reply.startsWith('(') && !reply.startsWith('⚠')) {
     await db.aiCache.put({
       term: key,
       explanation: reply.trim(),
@@ -111,18 +152,7 @@ Hãy trả lời bằng tiếng Việt thật rõ ràng, có cấu trúc gạch 
         },
       })
     }
-
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey.trim()}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts }] }),
-      },
-    )
-    if (!r.ok) throw new Error(`Gemini Vision lỗi (${r.status}). Kiểm tra lại API Key.`)
-    const j = await r.json()
-    return j.candidates?.[0]?.content?.parts?.[0]?.text ?? '(không có phản hồi)'
+    return await callGemini(apiKey, parts)
   } else {
     const content: any[] = [{ type: 'text', text: systemPrompt }]
     if (opts.imageDataUrl) {
@@ -140,7 +170,10 @@ Hãy trả lời bằng tiếng Việt thật rõ ràng, có cấu trúc gạch 
         messages: [{ role: 'user', content }],
       }),
     })
-    if (!r.ok) throw new Error(`OpenAI Vision lỗi (${r.status}). Kiểm tra lại API Key.`)
+    if (!r.ok) {
+      const errJson = await r.json().catch(() => null)
+      throw new Error(`OpenAI Vision: ${errJson?.error?.message || `Mã lỗi ${r.status}`}`)
+    }
     const j = await r.json()
     return j.choices?.[0]?.message?.content ?? '(không có phản hồi)'
   }
