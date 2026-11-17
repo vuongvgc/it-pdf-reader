@@ -180,8 +180,8 @@ export default function Settings() {
           onChange={(e) => s.set({ aiProvider: e.target.value as 'gemini' | 'openai' })}
           className="mb-3 w-full rounded-xl border border-slate-700 bg-slate-800 p-3 text-slate-200 outline-none"
         >
-          <option value="gemini">Google Gemini (gemini-2.0-flash - Hỗ trợ đọc cả ảnh Sơ đồ)</option>
-          <option value="openai">OpenAI (gpt-4o-mini)</option>
+          <option value="gemini">Google Gemini (Gemini 1.5 Flash / Tự động - Miễn phí, đọc cả ảnh Sơ đồ)</option>
+          <option value="openai">OpenAI (GPT-4o Mini)</option>
         </select>
         <label className="block text-xs text-slate-400 mb-1">API Key</label>
         <input
